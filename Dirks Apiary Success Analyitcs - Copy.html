@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Apiary Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: #16100A; }
+  #root { min-height: 100vh; }
+  * { box-sizing: border-box; }
+  input, select, button, textarea { font-family: inherit; }
+  .chip { cursor:pointer; user-select:none; transition: all .15s ease; }
+  .chip:hover { transform: translateY(-1px); }
+  .card { background: rgba(255,255,255,0.04); border:1px solid rgba(232,163,61,0.18); border-radius:16px; }
+  .ipt { background:#0F0A04; border:1px solid rgba(232,163,61,0.25); color:#F3E9D8; border-radius:10px; padding:10px 12px; outline:none; font-size:14px; width:100%; }
+  .ipt:focus { border-color:#E8A33D; }
+  .barfill { transition: width .4s ease; }
+  @keyframes rise { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+  .rise { animation: rise .35s ease both; }
+  @media (prefers-reduced-motion: reduce) { .rise { animation: none; } .barfill { transition: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- React, ReactDOM, Babel (loaded from CDN; needed once, then cached by the browser) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+/* ----------------------------------------------------------------
+   Inline icon components (replaces lucide-react so there is no
+   runtime dependency on an icon package). Each takes size/color.
+-----------------------------------------------------------------*/
+function Icon({ children, size = 16, color = "currentColor", fill = "none", fillOpacity, style }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill={fill} fillOpacity={fillOpacity} stroke={color} strokeWidth="2" strokeLinecap="round"
+      strokeLinejoin="round" style={style}>{children}</svg>
+  );
+}
+const Plus = (p) => <Icon {...p}><path d="M12 5v14M5 12h14" /></Icon>;
+const X = (p) => <Icon {...p}><path d="M18 6 6 18M6 6l12 12" /></Icon>;
+const Filter = (p) => <Icon {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></Icon>;
+const Hexagon = (p) => <Icon {...p}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></Icon>;
+const Calendar = (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></Icon>;
+const ClipboardList = (p) => <Icon {...p}><rect x="8" y="2" width="8" height="4" rx="1" ry="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01" /></Icon>;
+const Eye = (p) => <Icon {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></Icon>;
+const Trash2 = (p) => <Icon {...p}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></Icon>;
+const ChevronDown = (p) => <Icon {...p}><path d="m6 9 6 6 6-6" /></Icon>;
+const BarChart3 = (p) => <Icon {...p}><path d="M3 3v18h18" /><path d="M18 17V9M13 17V5M8 17v-3" /></Icon>;
+const Download = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></Icon>;
+const Pencil = (p) => <Icon {...p}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></Icon>;
+const Boxes = (p) => <Icon {...p}><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" /><path d="m7 16.5-4.74-2.85M7 16.5l5-3M7 16.5v5.17M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" /><path d="m17 16.5-5-3M17 16.5l4.74-2.85M17 16.5v5.17M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" /><path d="M12 8 7.26 5.15M12 8l4.74-2.85M12 13.5V8" /></Icon>;
+const Droplet = (p) => <Icon {...p}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" /></Icon>;
+const TrendingUp = (p) => <Icon {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></Icon>;
+const TrendingDown = (p) => <Icon {...p}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7" /><polyline points="16 17 22 17 22 11" /></Icon>;
+const Check = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12" /></Icon>;
+const Settings = (p) => <Icon {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></Icon>;
+const ThumbsUp = (p) => <Icon {...p}><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" /></Icon>;
+const ThumbsDown = (p) => <Icon {...p}><path d="M17 14V2" /><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" /></Icon>;
+const Minus = (p) => <Icon {...p}><path d="M5 12h14" /></Icon>;
+const Bell = (p) => <Icon {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Icon>;
+const Clock = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></Icon>;
+const AlertTriangle = (p) => <Icon {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></Icon>;
+
+/* ---------------- Default vocabularies ---------------- */
+const DEFAULT_ACTIONS = [
+  "Inspection", "Fed sugar syrup", "Fed pollen patty", "Added super",
+  "Removed super", "Added brood box", "Replaced queen", "Treated for mites",
+  "Treated for foulbrood", "Harvested honey", "Combined hive", "Split hive",
+  "Cleaned bottom board", "Added frames", "Insulated for winter", "Watered",
+];
+const DEFAULT_OBSERVATIONS = [
+  "Queen spotted", "Eggs present", "Capped brood", "Larvae present",
+  "Strong population", "Weak population", "Calm temperament", "Aggressive",
+  "Swarm cells seen", "Supersedure cells", "Honey stores high", "Honey stores low",
+  "Pollen stores good", "Mites visible", "Disease signs", "Robbing activity",
+  "Good foraging", "Dead bees at entrance", "Healthy & thriving",
+];
+const DEFAULT_SENTIMENT = {
+  "Queen spotted": "positive", "Eggs present": "positive", "Capped brood": "positive",
+  "Larvae present": "positive", "Strong population": "positive", "Calm temperament": "positive",
+  "Honey stores high": "positive", "Pollen stores good": "positive", "Good foraging": "positive",
+  "Healthy & thriving": "positive",
+  "Weak population": "negative", "Aggressive": "negative", "Swarm cells seen": "negative",
+  "Supersedure cells": "negative", "Honey stores low": "negative", "Mites visible": "negative",
+  "Disease signs": "negative", "Robbing activity": "negative", "Dead bees at entrance": "negative",
+};
+const FEEDER_TYPES = ["None", "Entrance", "Top / hive-top", "Frame / division-board", "Boardman", "Bucket / pail", "Open / community"];
+const DEFAULT_HIVE_TYPES = ["Langstroth", "Flow", "Top-Bar", "The Keeper's"];
+const DEFAULT_WINDOW = 21;
+const ACCENT = "#E8A33D";
+
+/* ---------------- Storage (browser localStorage) ----------------
+   Replaces Claude's async storage. Data lives in this browser on
+   this PC. Use the CSV export periodically as a backup.
+-----------------------------------------------------------------*/
+const KEY_HIVES = "apiary:hives";
+const KEY_LOGS = "apiary:logs";
+const KEY_SENTIMENT = "apiary:sentiment";
+const KEY_WINDOW = "apiary:window";
+const KEY_HIVE_TYPES = "apiary:hivetypes";
+const KEY_REMINDERS = "apiary:reminders";
+
+function lsGet(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch (e) { return fallback; }
+}
+function lsSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); }
+  catch (e) { console.error("storage set failed", e); }
+}
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const fmtDate = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+};
+// Whole days from today to an ISO date (negative = in the past).
+const daysUntil = (iso) => {
+  if (!iso) return null;
+  const dayMs = 86400000;
+  const today = new Date(todayISO() + "T00:00:00").getTime();
+  const target = new Date(iso + "T00:00:00").getTime();
+  return Math.round((target - today) / dayMs);
+};
+// Friendly relative label: "Today", "Tomorrow", "in 5 days", "3 days overdue".
+const relDate = (iso) => {
+  const n = daysUntil(iso);
+  if (n == null) return "";
+  if (n === 0) return "Today";
+  if (n === 1) return "Tomorrow";
+  if (n === -1) return "Yesterday";
+  if (n > 1) return `in ${n} days`;
+  return `${Math.abs(n)} days overdue`;
+};
+
+function ApiaryTracker() {
+  const [hives, setHives] = useState(() => lsGet(KEY_HIVES, []));
+  const [logs, setLogs] = useState(() => lsGet(KEY_LOGS, []));
+  const [sentiment, setSentiment] = useState(() => lsGet(KEY_SENTIMENT, {}));
+  const [followDays, setFollowDays] = useState(() => Number(lsGet(KEY_WINDOW, DEFAULT_WINDOW)) || DEFAULT_WINDOW);
+  const [hiveTypes, setHiveTypes] = useState(() => {
+    const saved = lsGet(KEY_HIVE_TYPES, null);
+    return Array.isArray(saved) && saved.length ? saved : DEFAULT_HIVE_TYPES;
+  });
+  const [reminders, setReminders] = useState(() => lsGet(KEY_REMINDERS, []));
+  const [tab, setTab] = useState("log");
+
+  const persistHives = (next) => { setHives(next); lsSet(KEY_HIVES, next); };
+  const persistLogs = (next) => { setLogs(next); lsSet(KEY_LOGS, next); };
+  const persistSentiment = (next) => { setSentiment(next); lsSet(KEY_SENTIMENT, next); };
+  const persistWindow = (next) => { setFollowDays(next); lsSet(KEY_WINDOW, next); };
+  const persistHiveTypes = (next) => { setHiveTypes(next); lsSet(KEY_HIVE_TYPES, next); };
+  const persistReminders = (next) => { setReminders(next); lsSet(KEY_REMINDERS, next); };
+
+  // Add a new hive type if it isn't already present (case-insensitive). Returns the stored label.
+  const addHiveType = (raw) => {
+    const label = String(raw || "").trim();
+    if (!label) return null;
+    const existing = hiveTypes.find((t) => t.toLowerCase() === label.toLowerCase());
+    if (existing) return existing;
+    persistHiveTypes([...hiveTypes, label]);
+    return label;
+  };
+
+  const sentimentOf = (obs) => sentiment[obs] ?? DEFAULT_SENTIMENT[obs] ?? "neutral";
+  const setObsSentiment = (obs, val) => persistSentiment({ ...sentiment, [obs]: val });
+
+  // ---- Hive management ----
+  const [newHiveName, setNewHiveName] = useState("");
+  const [newHiveArrival, setNewHiveArrival] = useState(todayISO());
+  const [newDeeps, setNewDeeps] = useState(1);
+  const [newSupers, setNewSupers] = useState(0);
+  const [newFeeder, setNewFeeder] = useState("None");
+  const [newType, setNewType] = useState(DEFAULT_HIVE_TYPES[0]);
+  const [addingType, setAddingType] = useState(false); // toggles the inline "new type" input
+  const [typeDraft, setTypeDraft] = useState("");
+  const [editId, setEditId] = useState(null);
+
+  const commitNewType = () => {
+    const stored = addHiveType(typeDraft);
+    if (stored) setNewType(stored);
+    setTypeDraft(""); setAddingType(false);
+  };
+
+  const addHive = () => {
+    const name = newHiveName.trim();
+    if (!name) return;
+    persistHives([...hives, {
+      id: uid(), name, arrival: newHiveArrival,
+      deeps: Number(newDeeps) || 0, supers: Number(newSupers) || 0,
+      feeder: newFeeder, hiveType: newType,
+    }]);
+    setNewHiveName(""); setNewHiveArrival(todayISO());
+    setNewDeeps(1); setNewSupers(0); setNewFeeder("None"); setNewType(hiveTypes[0] || DEFAULT_HIVE_TYPES[0]);
+  };
+  const updateHive = (id, patch) =>
+    persistHives(hives.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+  const removeHive = (id) => {
+    persistHives(hives.filter((h) => h.id !== id));
+    persistLogs(logs.filter((l) => l.hiveId !== id));
+    persistReminders(reminders.filter((r) => r.hiveId !== id));
+  };
+
+  // ---- Reminders ----
+  const [remHive, setRemHive] = useState("");
+  const [remDate, setRemDate] = useState(todayISO());
+  const [remNote, setRemNote] = useState("");
+
+  useEffect(() => {
+    if (!remHive && hives.length) setRemHive(hives[0].id);
+  }, [hives, remHive]);
+
+  const addReminder = () => {
+    if (!remHive || !remDate || !remNote.trim()) return;
+    const rec = { id: uid(), hiveId: remHive, date: remDate, note: remNote.trim(), done: false };
+    persistReminders([...reminders, rec]);
+    setRemNote(""); setRemDate(todayISO());
+  };
+  const toggleReminder = (id) =>
+    persistReminders(reminders.map((r) => (r.id === id ? { ...r, done: !r.done } : r)));
+  const removeReminder = (id) => persistReminders(reminders.filter((r) => r.id !== id));
+
+  // Count of reminders that are due today or overdue and not yet done (for the nav badge)
+  const dueCount = useMemo(() => {
+    const today = todayISO();
+    return reminders.filter((r) => !r.done && r.date <= today).length;
+  }, [reminders]);
+
+  // ---- New entry form ----
+  const [entryHive, setEntryHive] = useState("");
+  const [entryDate, setEntryDate] = useState(todayISO());
+  const [entryType, setEntryType] = useState("action");
+  const [entryValue, setEntryValue] = useState("");
+  const [entryNote, setEntryNote] = useState("");
+
+  useEffect(() => {
+    if (!entryHive && hives.length) setEntryHive(hives[0].id);
+  }, [hives, entryHive]);
+
+  const addEntry = () => {
+    if (!entryHive || !entryValue.trim()) return;
+    const rec = { id: uid(), hiveId: entryHive, date: entryDate, type: entryType, value: entryValue.trim(), note: entryNote.trim() };
+    persistLogs([rec, ...logs]);
+    setEntryValue(""); setEntryNote("");
+  };
+  const removeLog = (id) => persistLogs(logs.filter((l) => l.id !== id));
+
+  // ---- Filters ----
+  const [fHives, setFHives] = useState([]);
+  const [fActions, setFActions] = useState([]);
+  const [fObs, setFObs] = useState([]);
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
+
+  const knownActions = useMemo(() => {
+    const s = new Set(DEFAULT_ACTIONS);
+    logs.forEach((l) => l.type === "action" && s.add(l.value));
+    return [...s].sort();
+  }, [logs]);
+  const knownObs = useMemo(() => {
+    const s = new Set(DEFAULT_OBSERVATIONS);
+    logs.forEach((l) => l.type === "observation" && s.add(l.value));
+    return [...s].sort();
+  }, [logs]);
+
+  const filtered = useMemo(() => {
+    return logs.filter((l) => {
+      if (fHives.length && !fHives.includes(l.hiveId)) return false;
+      if (fFrom && l.date < fFrom) return false;
+      if (fTo && l.date > fTo) return false;
+      const anyValueFilter = fActions.length || fObs.length;
+      if (anyValueFilter) {
+        const matchA = l.type === "action" && fActions.includes(l.value);
+        const matchO = l.type === "observation" && fObs.includes(l.value);
+        if (!matchA && !matchO) return false;
+      }
+      return true;
+    });
+  }, [logs, fHives, fActions, fObs, fFrom, fTo]);
+
+  const activeFilterCount = fHives.length + fActions.length + fObs.length + (fFrom ? 1 : 0) + (fTo ? 1 : 0);
+  const clearFilters = () => { setFHives([]); setFActions([]); setFObs([]); setFFrom(""); setFTo(""); };
+  const hiveName = (id) => hives.find((h) => h.id === id)?.name || "Unknown hive";
+
+  const analysis = useMemo(() => {
+    const byHive = {};
+    filtered.forEach((l) => {
+      byHive[l.hiveId] = byHive[l.hiveId] || { actions: 0, obs: 0, values: {} };
+      if (l.type === "action") byHive[l.hiveId].actions++;
+      else byHive[l.hiveId].obs++;
+      byHive[l.hiveId].values[l.value] = (byHive[l.hiveId].values[l.value] || 0) + 1;
+    });
+    return byHive;
+  }, [filtered]);
+
+  const valueCounts = useMemo(() => {
+    const m = {};
+    filtered.forEach((l) => { m[l.value] = (m[l.value] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [filtered]);
+
+  const thriving = useMemo(() => {
+    const dayMs = 86400000;
+    const byHive = {};
+    filtered.forEach((l) => { (byHive[l.hiveId] = byHive[l.hiveId] || []).push(l); });
+    const result = {};
+    Object.entries(byHive).forEach(([hid, recs]) => {
+      const obs = recs.filter((r) => r.type === "observation");
+      const pos = obs.filter((r) => sentimentOf(r.value) === "positive").length;
+      const neg = obs.filter((r) => sentimentOf(r.value) === "negative").length;
+      const total = pos + neg;
+      const score = total ? Math.round((pos / total) * 100) : null;
+      const actions = recs.filter((r) => r.type === "action");
+      const actionStats = {};
+      actions.forEach((a) => {
+        const aTime = new Date(a.date + "T00:00:00").getTime();
+        let p = 0, n = 0;
+        obs.forEach((o) => {
+          const oTime = new Date(o.date + "T00:00:00").getTime();
+          const diff = oTime - aTime;
+          if (diff >= 0 && diff <= followDays * dayMs) {
+            const sv = sentimentOf(o.value);
+            if (sv === "positive") p++;
+            else if (sv === "negative") n++;
+          }
+        });
+        const s = actionStats[a.value] || { count: 0, pos: 0, neg: 0 };
+        s.count++; s.pos += p; s.neg += n;
+        actionStats[a.value] = s;
+      });
+      const actionList = Object.entries(actionStats)
+        .map(([name, s]) => ({ name, ...s, net: s.pos - s.neg }))
+        .sort((x, y) => y.net - x.net);
+      const classified = obs
+        .filter((o) => sentimentOf(o.value) !== "neutral")
+        .map((o) => ({ t: new Date(o.date + "T00:00:00").getTime(), good: sentimentOf(o.value) === "positive" }))
+        .sort((a, b) => a.t - b.t);
+      let cp = 0, cn = 0;
+      const trend = classified.map((c) => {
+        if (c.good) cp++; else cn++;
+        return { t: c.t, score: Math.round((cp / (cp + cn)) * 100) };
+      });
+      result[hid] = { score, pos, neg, total, actionList, trend };
+    });
+    return result;
+  }, [filtered, sentiment, followDays]);
+
+  const exportCSV = () => {
+    const esc = (v) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = ["Date", "Hive", "Hive type", "Type", "Entry", "Note", "Deeps", "Supers", "Feeder"];
+    const rows = filtered.map((l) => {
+      const h = hives.find((x) => x.id === l.hiveId) || {};
+      return [l.date, h.name || "", h.hiveType || "", l.type, l.value, l.note || "", h.deeps ?? "", h.supers ?? "", h.feeder ?? ""].map(esc).join(",");
+    });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `apiary-export-${todayISO()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const scoreColor = (s) => s == null ? "#7A6B4F" : s >= 70 ? "#8FD0A6" : s >= 45 ? ACCENT : "#E0786A";
+  const fonts = `'DM Sans', ui-sans-serif, system-ui, sans-serif`;
+  const display = `'Fraunces', Georgia, serif`;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 20% 0%, #2A1D08 0%, #16100A 60%)", color: "#F3E9D8", fontFamily: fonts, paddingBottom: 60 }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&display=swap');`}</style>
+
+      <header style={{ padding: "32px 22px 18px", maxWidth: 920, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Hexagon size={34} color={ACCENT} fill={ACCENT} fillOpacity={0.18} />
+          <div>
+            <h1 style={{ fontFamily: display, fontWeight: 900, fontSize: 30, margin: 0, letterSpacing: -0.5 }}>The Apiary Ledger</h1>
+            <p style={{ margin: "2px 0 0", color: "#B59C73", fontSize: 13 }}>
+              {hives.length} hive{hives.length !== 1 ? "s" : ""} · {logs.length} record{logs.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+
+        <nav style={{ display: "flex", gap: 6, marginTop: 22, background: "rgba(0,0,0,0.25)", padding: 5, borderRadius: 14, width: "fit-content", flexWrap: "wrap" }}>
+          {[
+            { k: "log", label: "Log", icon: ClipboardList },
+            { k: "analyze", label: "Analyze", icon: BarChart3 },
+            { k: "reminders", label: "Reminders", icon: Bell },
+            { k: "hives", label: "Hives", icon: Hexagon },
+            { k: "settings", label: "Settings", icon: Settings },
+          ].map(({ k, label, icon: IconC }) => (
+            <button key={k} onClick={() => setTab(k)} style={{
+              display: "flex", alignItems: "center", gap: 7, border: "none", cursor: "pointer",
+              padding: "9px 16px", borderRadius: 10, fontSize: 14, fontWeight: 600,
+              background: tab === k ? ACCENT : "transparent", color: tab === k ? "#1A1206" : "#C9B189",
+            }}>
+              <IconC size={16} /> {label}
+              {k === "reminders" && dueCount > 0 && (
+                <span style={{
+                  background: tab === k ? "#1A1206" : "#E0786A", color: tab === k ? ACCENT : "#1A1206",
+                  fontSize: 11, fontWeight: 800, borderRadius: 20, padding: "0 7px", minWidth: 18, textAlign: "center",
+                }}>{dueCount}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <main style={{ maxWidth: 920, margin: "0 auto", padding: "0 22px" }}>
+        {/* HIVES TAB */}
+        {tab === "hives" && (
+          <section className="rise">
+            <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+              <h2 style={{ fontFamily: display, fontSize: 19, margin: "0 0 14px" }}>Add a hive</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <label style={lbl}>Hive name</label>
+                  <input className="ipt" value={newHiveName} placeholder="e.g. Willow Queen"
+                    onChange={(e) => setNewHiveName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addHive()} />
+                </div>
+                <div>
+                  <label style={lbl}>Arrival date</label>
+                  <input className="ipt" type="date" value={newHiveArrival} onChange={(e) => setNewHiveArrival(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div>
+                  <label style={lbl}># Deeps (brood)</label>
+                  <input className="ipt" type="number" min="0" value={newDeeps} onChange={(e) => setNewDeeps(e.target.value)} />
+                </div>
+                <div>
+                  <label style={lbl}># Supers (honey)</label>
+                  <input className="ipt" type="number" min="0" value={newSupers} onChange={(e) => setNewSupers(e.target.value)} />
+                </div>
+                <div>
+                  <label style={lbl}>Feeder type</label>
+                  <select className="ipt" value={newFeeder} onChange={(e) => setNewFeeder(e.target.value)}>
+                    {FEEDER_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                  <label style={{ ...lbl, marginBottom: 0 }}>Hive type</label>
+                  <button onClick={() => { setAddingType((v) => !v); setTypeDraft(""); }} style={{
+                    display: "flex", alignItems: "center", gap: 4, background: "none", border: "none",
+                    color: ACCENT, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                  }}>{addingType ? <X size={13} /> : <Plus size={13} />} {addingType ? "Cancel" : "New type"}</button>
+                </div>
+                {addingType ? (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input className="ipt" autoFocus value={typeDraft} placeholder="e.g. Warré, Layens, Nuc…"
+                      onChange={(e) => setTypeDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") commitNewType(); if (e.key === "Escape") { setAddingType(false); setTypeDraft(""); } }} />
+                    <button onClick={commitNewType} disabled={!typeDraft.trim()} style={{
+                      ...primaryBtn, padding: "9px 16px", whiteSpace: "nowrap",
+                      opacity: typeDraft.trim() ? 1 : 0.5, cursor: typeDraft.trim() ? "pointer" : "not-allowed",
+                    }}><Check size={15} /> Save</button>
+                  </div>
+                ) : (
+                  <select className="ipt" value={newType} onChange={(e) => setNewType(e.target.value)}>
+                    {hiveTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
+              </div>
+              <button onClick={addHive} style={{ ...primaryBtn, width: "100%", justifyContent: "center" }}><Plus size={16} /> Add hive</button>
+            </div>
+
+            {hives.length === 0 ? (
+              <Empty text="No hives yet. Add your first one above." />
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {hives.map((h) => {
+                  const count = logs.filter((l) => l.hiveId === h.id).length;
+                  const editing = editId === h.id;
+                  if (editing) {
+                    return (
+                      <div key={h.id} className="card rise" style={{ padding: "16px 18px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                          <div>
+                            <label style={lbl}>Hive name</label>
+                            <input className="ipt" value={h.name} onChange={(e) => updateHive(h.id, { name: e.target.value })} />
+                          </div>
+                          <div>
+                            <label style={lbl}>Arrival date</label>
+                            <input className="ipt" type="date" value={h.arrival || ""} onChange={(e) => updateHive(h.id, { arrival: e.target.value })} />
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+                          <div>
+                            <label style={lbl}># Deeps</label>
+                            <input className="ipt" type="number" min="0" value={h.deeps ?? 0} onChange={(e) => updateHive(h.id, { deeps: Number(e.target.value) || 0 })} />
+                          </div>
+                          <div>
+                            <label style={lbl}># Supers</label>
+                            <input className="ipt" type="number" min="0" value={h.supers ?? 0} onChange={(e) => updateHive(h.id, { supers: Number(e.target.value) || 0 })} />
+                          </div>
+                          <div>
+                            <label style={lbl}>Feeder type</label>
+                            <select className="ipt" value={h.feeder ?? "None"} onChange={(e) => updateHive(h.id, { feeder: e.target.value })}>
+                              {FEEDER_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{ marginBottom: 12 }}>
+                          <label style={lbl}>Hive type</label>
+                          <select className="ipt" value={h.hiveType && hiveTypes.includes(h.hiveType) ? h.hiveType : (h.hiveType || "")}
+                            onChange={(e) => {
+                              if (e.target.value === "__add__") {
+                                const entry = (typeof window !== "undefined" && window.prompt) ? window.prompt("Name the new hive type:") : null;
+                                const stored = addHiveType(entry);
+                                if (stored) updateHive(h.id, { hiveType: stored });
+                              } else {
+                                updateHive(h.id, { hiveType: e.target.value });
+                              }
+                            }}>
+                            {h.hiveType && !hiveTypes.includes(h.hiveType) && (
+                              <option value={h.hiveType}>{h.hiveType}</option>
+                            )}
+                            {hiveTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                            <option value="__add__">+ Add new type…</option>
+                          </select>
+                        </div>
+                        <button onClick={() => setEditId(null)} style={{ ...primaryBtn, padding: "9px 16px" }}><Check size={15} /> Done</button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={h.id} className="card rise" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1 }}>
+                        <Hexagon size={26} color={ACCENT} fill={ACCENT} fillOpacity={0.2} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 16 }}>{h.name}</div>
+                          <div style={{ fontSize: 12.5, color: "#B59C73", display: "flex", gap: 12, marginTop: 3, flexWrap: "wrap" }}>
+                            <span><Calendar size={11} style={{ verticalAlign: -1 }} /> Arrived {fmtDate(h.arrival)}</span>
+                            {h.hiveType && <span><Hexagon size={11} style={{ verticalAlign: -1 }} /> {h.hiveType}</span>}
+                            <span><Boxes size={11} style={{ verticalAlign: -1 }} /> {h.deeps ?? 0} deep{(h.deeps ?? 0) !== 1 ? "s" : ""} · {h.supers ?? 0} super{(h.supers ?? 0) !== 1 ? "s" : ""}</span>
+                            <span><Droplet size={11} style={{ verticalAlign: -1 }} /> {h.feeder && h.feeder !== "None" ? h.feeder : "No feeder"}</span>
+                            <span>{count} record{count !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => setEditId(h.id)} title="Edit hive" style={iconBtn}><Pencil size={15} /></button>
+                        <button onClick={() => removeHive(h.id)} title="Delete hive & its records" style={iconBtn}><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* LOG TAB */}
+        {tab === "log" && (
+          <section className="rise">
+            {hives.length === 0 ? (
+              <Empty text="Add a hive first (Hives tab) before logging." />
+            ) : (
+              <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+                <h2 style={{ fontFamily: display, fontSize: 19, margin: "0 0 14px" }}>New entry</h2>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={lbl}>Hive</label>
+                    <select className="ipt" value={entryHive} onChange={(e) => setEntryHive(e.target.value)}>
+                      {hives.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Date</label>
+                    <input className="ipt" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  {["action", "observation"].map((t) => (
+                    <button key={t} onClick={() => { setEntryType(t); setEntryValue(""); }} style={{
+                      flex: 1, padding: "9px", borderRadius: 10, cursor: "pointer", fontWeight: 600, fontSize: 14,
+                      border: `1px solid ${entryType === t ? ACCENT : "rgba(232,163,61,0.25)"}`,
+                      background: entryType === t ? "rgba(232,163,61,0.15)" : "transparent",
+                      color: entryType === t ? ACCENT : "#C9B189", textTransform: "capitalize",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                    }}>
+                      {t === "action" ? <ClipboardList size={15} /> : <Eye size={15} />} {t}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={lbl}>{entryType === "action" ? "Action" : "Observation"} (pick or type your own)</label>
+                  <input className="ipt" list="vocab" value={entryValue}
+                    placeholder={entryType === "action" ? "e.g. Added super" : "e.g. Queen spotted"}
+                    onChange={(e) => setEntryValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addEntry()} />
+                  <datalist id="vocab">
+                    {(entryType === "action" ? knownActions : knownObs).map((v) => <option key={v} value={v} />)}
+                  </datalist>
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lbl}>Note (optional)</label>
+                  <textarea className="ipt" rows={2} value={entryNote} placeholder="Any details…"
+                    onChange={(e) => setEntryNote(e.target.value)} />
+                </div>
+                <button onClick={addEntry} style={{ ...primaryBtn, width: "100%", justifyContent: "center" }}>
+                  <Plus size={16} /> Save entry
+                </button>
+              </div>
+            )}
+
+            <FilterBar {...{ hives, knownActions, knownObs, fHives, setFHives, fActions, setFActions, fObs, setFObs, fFrom, setFFrom, fTo, setFTo, activeFilterCount, clearFilters }} />
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "20px 0 10px" }}>
+              <h2 style={{ fontFamily: display, fontSize: 19, margin: 0 }}>Records</h2>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ color: "#B59C73", fontSize: 13 }}>{filtered.length} shown</span>
+                <button onClick={exportCSV} disabled={!filtered.length} title="Export filtered records to CSV" style={{
+                  display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600,
+                  background: "rgba(232,163,61,0.15)", color: ACCENT, border: `1px solid rgba(232,163,61,0.4)`,
+                  borderRadius: 9, padding: "7px 12px", cursor: filtered.length ? "pointer" : "not-allowed",
+                  opacity: filtered.length ? 1 : 0.5,
+                }}><Download size={14} /> Export CSV</button>
+              </div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <Empty text="No records match. Try clearing filters or add an entry." />
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {filtered.map((l) => (
+                  <div key={l.id} className="card rise" style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+                          padding: "2px 8px", borderRadius: 6,
+                          background: l.type === "action" ? "rgba(232,163,61,0.18)" : "rgba(120,180,140,0.18)",
+                          color: l.type === "action" ? ACCENT : "#8FD0A6",
+                        }}>{l.type}</span>
+                        <strong style={{ fontSize: 15 }}>{l.value}</strong>
+                      </div>
+                      <div style={{ fontSize: 12.5, color: "#B59C73", marginTop: 4, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        <span><Hexagon size={11} style={{ verticalAlign: -1 }} /> {hiveName(l.hiveId)}</span>
+                        <span><Calendar size={11} style={{ verticalAlign: -1 }} /> {fmtDate(l.date)}</span>
+                      </div>
+                      {l.note && <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#D8C7A8" }}>{l.note}</p>}
+                    </div>
+                    <button onClick={() => removeLog(l.id)} style={iconBtn}><X size={15} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ANALYZE TAB */}
+        {tab === "analyze" && (
+          <section className="rise">
+            <FilterBar {...{ hives, knownActions, knownObs, fHives, setFHives, fActions, setFActions, fObs, setFObs, fFrom, setFFrom, fTo, setFTo, activeFilterCount, clearFilters }} />
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+              <button onClick={exportCSV} disabled={!filtered.length} style={{
+                display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600,
+                background: "rgba(232,163,61,0.15)", color: ACCENT, border: `1px solid rgba(232,163,61,0.4)`,
+                borderRadius: 9, padding: "7px 12px", cursor: filtered.length ? "pointer" : "not-allowed",
+                opacity: filtered.length ? 1 : 0.5,
+              }}><Download size={14} /> Export CSV</button>
+            </div>
+
+            <div className="card" style={{ padding: 20, margin: "14px 0 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+                <TrendingUp size={19} color={ACCENT} />
+                <h2 style={{ fontFamily: display, fontSize: 19, margin: 0 }}>Thriving score</h2>
+              </div>
+              <p style={{ color: "#B59C73", fontSize: 13, margin: "0 0 16px" }}>
+                Each hive's share of positive vs. negative observations (0–100). Below it, the actions that most often precede good signs within {followDays} days — your levers for helping that hive thrive. Tweak the tagging and window in <strong style={{ color: ACCENT, cursor: "pointer" }} onClick={() => setTab("settings")}>Settings</strong>.
+              </p>
+              {Object.keys(thriving).length === 0 ? (
+                <Empty text="No data in current filter. Log some observations to build a score." />
+              ) : (
+                <div style={{ display: "grid", gap: 18 }}>
+                  {hives.filter((h) => thriving[h.id]).map((h) => {
+                    const t = thriving[h.id];
+                    const helpful = t.actionList.filter((a) => a.net > 0).slice(0, 3);
+                    const harmful = t.actionList.filter((a) => a.net < 0).slice(-3).reverse();
+                    const tr = t.trend;
+                    const delta = tr.length >= 2 ? tr[tr.length - 1].score - tr[0].score : null;
+                    return (
+                      <div key={h.id} style={{ borderLeft: `3px solid ${scoreColor(t.score)}`, paddingLeft: 14, display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "start" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                            <strong style={{ fontSize: 15.5 }}>{h.name}</strong>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontSize: 12.5, color: "#B59C73" }}>{t.pos} positive · {t.neg} negative</span>
+                              <span style={{ fontFamily: display, fontWeight: 900, fontSize: 22, color: scoreColor(t.score) }}>
+                                {t.score == null ? "—" : t.score}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 6, overflow: "hidden", margin: "8px 0 10px" }}>
+                            <div className="barfill" style={{ width: `${t.score ?? 0}%`, height: "100%", background: scoreColor(t.score), borderRadius: 6 }} />
+                          </div>
+                          {helpful.length > 0 && (
+                            <div style={{ fontSize: 12.5, marginBottom: 5 }}>
+                              <span style={{ color: "#8FD0A6", fontWeight: 600 }}>Helps: </span>
+                              {helpful.map((a) => (
+                                <span key={a.name} style={{ color: "#D8C7A8" }}>{a.name} <span style={{ color: "#8FD0A6" }}>(+{a.net})</span>{a !== helpful[helpful.length - 1] ? ", " : ""}</span>
+                              ))}
+                            </div>
+                          )}
+                          {harmful.length > 0 && (
+                            <div style={{ fontSize: 12.5 }}>
+                              <span style={{ color: "#E0786A", fontWeight: 600 }}>Followed by trouble: </span>
+                              {harmful.map((a) => (
+                                <span key={a.name} style={{ color: "#D8C7A8" }}>{a.name} <span style={{ color: "#E0786A" }}>({a.net})</span>{a !== harmful[harmful.length - 1] ? ", " : ""}</span>
+                              ))}
+                            </div>
+                          )}
+                          {helpful.length === 0 && harmful.length === 0 && (
+                            <div style={{ fontSize: 12.5, color: "#7A6B4F" }}>No action→observation correlations yet.</div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.6, color: "#B59C73", marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+                            Trend
+                            {delta != null && delta !== 0 && (
+                              <span style={{ color: delta > 0 ? "#8FD0A6" : "#E0786A", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 1 }}>
+                                {delta > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{delta > 0 ? "+" : ""}{delta}
+                              </span>
+                            )}
+                          </div>
+                          <Sparkline points={tr} color={scoreColor(t.score)} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+              <h2 style={{ fontFamily: display, fontSize: 19, margin: "0 0 4px" }}>Per-hive summary</h2>
+              <p style={{ color: "#B59C73", fontSize: 13, margin: "0 0 16px" }}>Across {filtered.length} filtered records — see which hives get what, and what's thriving.</p>
+              {Object.keys(analysis).length === 0 ? (
+                <Empty text="No data in current filter." />
+              ) : (
+                <div style={{ display: "grid", gap: 14 }}>
+                  {hives.filter((h) => analysis[h.id]).map((h) => {
+                    const a = analysis[h.id];
+                    const top = Object.entries(a.values).sort((x, y) => y[1] - x[1]).slice(0, 4);
+                    return (
+                      <div key={h.id} style={{ borderLeft: `3px solid ${ACCENT}`, paddingLeft: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <strong style={{ fontSize: 15.5 }}>{h.name}</strong>
+                          <span style={{ fontSize: 12.5, color: "#B59C73" }}>{a.actions} actions · {a.obs} observations</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          {top.map(([v, c]) => (
+                            <span key={v} style={{ fontSize: 12, background: "rgba(255,255,255,0.06)", padding: "3px 9px", borderRadius: 20, color: "#E8D9BD" }}>
+                              {v} <strong style={{ color: ACCENT }}>×{c}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: 20 }}>
+              <h2 style={{ fontFamily: display, fontSize: 19, margin: "0 0 16px" }}>Frequency ranking</h2>
+              {valueCounts.length === 0 ? (
+                <Empty text="No data in current filter." />
+              ) : (
+                <div style={{ display: "grid", gap: 9 }}>
+                  {valueCounts.map(([v, c]) => {
+                    const max = valueCounts[0][1];
+                    return (
+                      <div key={v}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
+                          <span>{v}</span><strong style={{ color: ACCENT }}>{c}</strong>
+                        </div>
+                        <div style={{ height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 6, overflow: "hidden" }}>
+                          <div className="barfill" style={{ width: `${(c / max) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${ACCENT}, #C97A2B)`, borderRadius: 6 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* REMINDERS TAB */}
+        {tab === "reminders" && (
+          <section className="rise">
+            {hives.length === 0 ? (
+              <Empty text="Add a hive first (Hives tab) before setting reminders." />
+            ) : (
+              <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+                  <Bell size={18} color={ACCENT} />
+                  <h2 style={{ fontFamily: display, fontSize: 19, margin: 0 }}>New reminder</h2>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={lbl}>Hive</label>
+                    <select className="ipt" value={remHive} onChange={(e) => setRemHive(e.target.value)}>
+                      {hives.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Remind me on</label>
+                    <input className="ipt" type="date" min={todayISO()} value={remDate} onChange={(e) => setRemDate(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lbl}>What for?</label>
+                  <input className="ipt" value={remNote} placeholder="e.g. Check mite treatment, add second super…"
+                    onChange={(e) => setRemNote(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addReminder()} />
+                </div>
+                <button onClick={addReminder} disabled={!remHive || !remDate || !remNote.trim()} style={{
+                  ...primaryBtn, width: "100%", justifyContent: "center",
+                  opacity: (!remHive || !remDate || !remNote.trim()) ? 0.5 : 1,
+                  cursor: (!remHive || !remDate || !remNote.trim()) ? "not-allowed" : "pointer",
+                }}>
+                  <Plus size={16} /> Set reminder
+                </button>
+              </div>
+            )}
+
+            {(() => {
+              const live = reminders.filter((r) => !r.done).slice().sort((a, b) => a.date.localeCompare(b.date));
+              const done = reminders.filter((r) => r.done).slice().sort((a, b) => b.date.localeCompare(a.date));
+              const hiveNm = (id) => hives.find((h) => h.id === id)?.name || "Unknown hive";
+
+              const Row = (r) => {
+                const n = daysUntil(r.date);
+                const overdue = !r.done && n != null && n < 0;
+                const dueToday = !r.done && n === 0;
+                const accentCol = r.done ? "#7A6B4F" : overdue ? "#E0786A" : dueToday ? ACCENT : "#8FD0A6";
+                return (
+                  <div key={r.id} className="card rise" style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: 12, borderLeft: `3px solid ${accentCol}` }}>
+                    <button onClick={() => toggleReminder(r.id)} title={r.done ? "Mark as not done" : "Mark as done"} style={{
+                      flexShrink: 0, width: 26, height: 26, borderRadius: 7, cursor: "pointer", marginTop: 1,
+                      border: `1px solid ${r.done ? "#8FD0A6" : "rgba(255,255,255,0.25)"}`,
+                      background: r.done ? "#8FD0A6" : "transparent",
+                      color: r.done ? "#1A1206" : "transparent", display: "flex", alignItems: "center", justifyContent: "center",
+                    }}><Check size={15} /></button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 600, color: r.done ? "#8A7B5E" : "#F3E9D8", textDecoration: r.done ? "line-through" : "none" }}>{r.note}</div>
+                      <div style={{ fontSize: 12.5, color: "#B59C73", marginTop: 4, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                        <span><Hexagon size={11} style={{ verticalAlign: -1 }} /> {hiveNm(r.hiveId)}</span>
+                        <span><Calendar size={11} style={{ verticalAlign: -1 }} /> {fmtDate(r.date)}</span>
+                        {!r.done && (
+                          <span style={{ color: accentCol, fontWeight: 700 }}>{relDate(r.date)}</span>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={() => removeReminder(r.id)} title="Delete reminder" style={iconBtn}><X size={15} /></button>
+                  </div>
+                );
+              };
+
+              return (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "4px 0 10px" }}>
+                    <h2 style={{ fontFamily: display, fontSize: 19, margin: 0 }}>Upcoming</h2>
+                    <span style={{ color: "#B59C73", fontSize: 13 }}>{live.length} active</span>
+                  </div>
+                  {live.length === 0 ? (
+                    <Empty text="No active reminders. Set one above to get a nudge later." />
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>{live.map(Row)}</div>
+                  )}
+
+                  {done.length > 0 && (
+                    <>
+                      <h2 style={{ fontFamily: display, fontSize: 19, margin: "22px 0 10px" }}>Done</h2>
+                      <div style={{ display: "grid", gap: 8 }}>{done.map(Row)}</div>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </section>
+        )}
+
+        {/* SETTINGS TAB */}
+        {tab === "settings" && (
+          <section className="rise">
+            <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+                <Calendar size={18} color={ACCENT} />
+                <h2 style={{ fontFamily: display, fontSize: 19, margin: 0 }}>Follow-up window</h2>
+              </div>
+              <p style={{ color: "#B59C73", fontSize: 13, margin: "0 0 16px" }}>
+                When correlating an action with hive health, observations are counted if they happen within this many days after the action.
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <input type="range" min="1" max="90" value={followDays}
+                  onChange={(e) => persistWindow(Number(e.target.value))}
+                  style={{ flex: 1, accentColor: ACCENT }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input className="ipt" type="number" min="1" max="365" value={followDays}
+                    onChange={(e) => persistWindow(Math.max(1, Number(e.target.value) || 1))}
+                    style={{ width: 78 }} />
+                  <span style={{ color: "#B59C73", fontSize: 13 }}>days</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                {[7, 14, 21, 30, 60].map((d) => (
+                  <Chip key={d} active={followDays === d} onClick={() => persistWindow(d)}>{d}d</Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+                <TrendingUp size={18} color={ACCENT} />
+                <h2 style={{ fontFamily: display, fontSize: 19, margin: 0 }}>Observation tagging</h2>
+              </div>
+              <p style={{ color: "#B59C73", fontSize: 13, margin: "0 0 18px" }}>
+                Tag each observation as positive, neutral, or negative. This drives every thriving score. Custom observations you've logged appear here too — neutral ones are ignored by the score.
+              </p>
+              <div style={{ display: "grid", gap: 8 }}>
+                {knownObs.map((o) => {
+                  const sv = sentimentOf(o);
+                  const overridden = o in sentiment;
+                  const opts = [
+                    { v: "positive", icon: ThumbsUp, color: "#8FD0A6" },
+                    { v: "neutral", icon: Minus, color: "#B59C73" },
+                    { v: "negative", icon: ThumbsDown, color: "#E0786A" },
+                  ];
+                  return (
+                    <div key={o} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 10 }}>
+                      <span style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                        {o}
+                        {overridden && <span style={{ fontSize: 10.5, color: ACCENT, border: `1px solid ${ACCENT}`, borderRadius: 5, padding: "1px 5px" }}>custom</span>}
+                      </span>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {opts.map(({ v, icon: IconC, color }) => (
+                          <button key={v} onClick={() => setObsSentiment(o, v)} title={v} style={{
+                            display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 30,
+                            borderRadius: 8, cursor: "pointer",
+                            border: `1px solid ${sv === v ? color : "rgba(255,255,255,0.12)"}`,
+                            background: sv === v ? color : "transparent",
+                            color: sv === v ? "#1A1206" : color,
+                          }}><IconC size={15} /></button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {Object.keys(sentiment).length > 0 && (
+                <button onClick={() => persistSentiment({})} style={{
+                  marginTop: 16, background: "none", border: "1px solid rgba(255,255,255,0.15)", color: "#B59C73",
+                  borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                }}>Reset all tags to defaults</button>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/* ---------------- Filter bar ---------------- */
+function FilterBar(props) {
+  const { hives, knownActions, knownObs, fHives, setFHives, fActions, setFActions, fObs, setFObs, fFrom, setFFrom, fTo, setFTo, activeFilterCount, clearFilters } = props;
+  const [open, setOpen] = useState(false);
+  const display = `'Fraunces', Georgia, serif`;
+  const toggle = (arr, setArr, val) =>
+    setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }} onClick={() => setOpen((o) => !o)}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Filter size={17} color={ACCENT} />
+          <span style={{ fontFamily: display, fontSize: 17 }}>Filters</span>
+          {activeFilterCount > 0 && (
+            <span style={{ background: ACCENT, color: "#1A1206", fontSize: 12, fontWeight: 700, borderRadius: 20, padding: "1px 9px" }}>{activeFilterCount}</span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {activeFilterCount > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); clearFilters(); }} style={{ background: "none", border: "none", color: "#B59C73", cursor: "pointer", fontSize: 13, textDecoration: "underline" }}>Clear</button>
+          )}
+          <ChevronDown size={18} color="#B59C73" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+        </div>
+      </div>
+      {open && (
+        <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
+          <FilterGroup title="Hives">
+            {hives.map((h) => (
+              <Chip key={h.id} active={fHives.includes(h.id)} onClick={() => toggle(fHives, setFHives, h.id)}>{h.name}</Chip>
+            ))}
+            {hives.length === 0 && <span style={muted}>No hives</span>}
+          </FilterGroup>
+          <FilterGroup title="Actions">
+            {knownActions.map((a) => (
+              <Chip key={a} active={fActions.includes(a)} onClick={() => toggle(fActions, setFActions, a)}>{a}</Chip>
+            ))}
+          </FilterGroup>
+          <FilterGroup title="Observations">
+            {knownObs.map((o) => (
+              <Chip key={o} active={fObs.includes(o)} color="#8FD0A6" onClick={() => toggle(fObs, setFObs, o)}>{o}</Chip>
+            ))}
+          </FilterGroup>
+          <FilterGroup title="Date range">
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <input className="ipt" style={{ width: 160 }} type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} />
+              <span style={muted}>to</span>
+              <input className="ipt" style={{ width: 160 }} type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} />
+            </div>
+          </FilterGroup>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilterGroup({ title, children }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: "#B59C73", marginBottom: 8, fontWeight: 700 }}>{title}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{children}</div>
+    </div>
+  );
+}
+
+function Chip({ active, onClick, children, color = ACCENT }) {
+  return (
+    <span className="chip" onClick={onClick} style={{
+      fontSize: 12.5, padding: "5px 11px", borderRadius: 20,
+      border: `1px solid ${active ? color : "rgba(255,255,255,0.14)"}`,
+      background: active ? color : "transparent",
+      color: active ? "#1A1206" : "#D8C7A8", fontWeight: active ? 700 : 500,
+    }}>{children}</span>
+  );
+}
+
+function Empty({ text }) {
+  return (
+    <div className="card" style={{ padding: 30, textAlign: "center", color: "#B59C73", fontSize: 14 }}>{text}</div>
+  );
+}
+
+function Sparkline({ points, color, width = 150, height = 36 }) {
+  if (!points || points.length < 2) {
+    return <span style={{ fontSize: 11.5, color: "#7A6B4F", fontStyle: "italic" }}>Need 2+ classified observations for a trend</span>;
+  }
+  const pad = 3;
+  const tMin = points[0].t, tMax = points[points.length - 1].t;
+  const tSpan = tMax - tMin || 1;
+  const x = (t) => pad + ((t - tMin) / tSpan) * (width - pad * 2);
+  const y = (s) => pad + (1 - s / 100) * (height - pad * 2);
+  const coords = points.map((p) => [x(p.t), y(p.score)]);
+  const line = coords.map((c, i) => `${i ? "L" : "M"}${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(" ");
+  const area = `${line} L${coords[coords.length - 1][0].toFixed(1)},${height - pad} L${coords[0][0].toFixed(1)},${height - pad} Z`;
+  const last = coords[coords.length - 1];
+  const gid = `spark-${Math.random().toString(36).slice(2, 7)}`;
+  return (
+    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <line x1={pad} y1={y(50)} x2={width - pad} y2={y(50)} stroke="rgba(255,255,255,0.10)" strokeWidth="1" strokeDasharray="2 3" />
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last[0]} cy={last[1]} r="2.8" fill={color} />
+    </svg>
+  );
+}
+
+const lbl = { display: "block", fontSize: 12.5, color: "#B59C73", marginBottom: 5, fontWeight: 600 };
+const muted = { color: "#B59C73", fontSize: 13 };
+const primaryBtn = { display: "flex", alignItems: "center", gap: 7, background: ACCENT, color: "#1A1206", border: "none", borderRadius: 10, padding: "11px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const iconBtn = { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#B59C73", borderRadius: 8, padding: 7, cursor: "pointer", display: "flex" };
+
+ReactDOM.createRoot(document.getElementById("root")).render(<ApiaryTracker />);
+</script>
+</body>
+</html>
